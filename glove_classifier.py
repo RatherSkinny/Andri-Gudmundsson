@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 import sys
+import requests
 
 # Paths to training image folders
 BASE_DIR = Path(__file__).resolve().parent
@@ -11,6 +12,9 @@ FOLDERS = {
     "good_under_750": BASE_DIR / "good_under_750",
     "reject": BASE_DIR / "reject"
 }
+
+# Discord webhook URL (replace with your own)
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")  # Set this in Render environment variables
 
 def calculate_brightness(image_path):
     img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
@@ -57,6 +61,23 @@ def classify_glove_pair(left_path, right_path):
     else:
         return "good_under_750"
 
+def send_discord_ping(label, left_path, right_path):
+    if DISCORD_WEBHOOK_URL is None:
+        print("No Discord webhook set.")
+        return
+
+    files = {
+        "file1": open(left_path, "rb"),
+        "file2": open(right_path, "rb")
+    }
+
+    payload = {
+        "content": f"New Black Tie Gloves match: **{label.upper()}**"
+    }
+
+    response = requests.post(DISCORD_WEBHOOK_URL, data=payload, files=files)
+    print(f"Discord notification sent. Status code: {response.status_code}")
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: python glove_classifier.py path/to/left.png path/to/right.png")
@@ -65,3 +86,5 @@ if __name__ == "__main__":
         right_path = Path(sys.argv[2])
         label = classify_glove_pair(left_path, right_path)
         print(f"Pair classified as: {label}")
+        if label in ["must_buy", "good_under_750"]:
+            send_discord_ping(label, left_path, right_path)
