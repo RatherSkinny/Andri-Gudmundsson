@@ -10,7 +10,7 @@ import os
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 PRICE_THRESHOLD = 780.00
 SEARCH_URL = "https://csfloat.com/api/v1/listings?type=gloves&paint=black%20tie&exterior=minimal%20wear&sort=asc"
-CHECK_INTERVAL = 600  # in seconds (10 min)
+CHECK_INTERVAL = 600  # 10 minutes
 # ============================
 
 def image_hash(image):
@@ -22,14 +22,19 @@ def image_hash(image):
 def is_clean_knuckles(image_url):
     try:
         response = requests.get(image_url)
+        response.raise_for_status()
         image = Image.open(BytesIO(response.content))
         hash_value = image_hash(image)
-        return True  # placeholder: accepts all gloves for now
+        # TODO: Add hash comparison if needed
+        return True
     except Exception as e:
-        print(f"Image check failed: {e}")
+        print(f"[❌] Image check failed: {e}")
         return False
 
 def notify_discord(item):
+    if not DISCORD_WEBHOOK_URL:
+        print("[⚠️] Webhook URL ekki skilgreint (env var ekki sett).")
+        return
     data = {
         "embeds": [
             {
@@ -44,25 +49,41 @@ def notify_discord(item):
         ]
     }
     headers = {'Content-Type': 'application/json'}
-    requests.post(DISCORD_WEBHOOK_URL, data=json.dumps(data), headers=headers)
+    try:
+        response = requests.post(DISCORD_WEBHOOK_URL, data=json.dumps(data), headers=headers)
+        print(f"[✅] Sent alert to Discord (status: {response.status_code})")
+    except Exception as e:
+        print(f"[❌] Error sending to Discord: {e}")
 
 def test_notify():
+    if not DISCORD_WEBHOOK_URL:
+        print("[⚠️] Webhook URL ekki skilgreint (env var ekki sett).")
+        return
     data = {
         "content": "✅ Botinn er ræstur og virkar! Þú færð tilkynningu þegar góð díl finnst. 🔍🧤"
     }
     headers = {'Content-Type': 'application/json'}
-    requests.post(DISCORD_WEBHOOK_URL, data=json.dumps(data), headers=headers)
+    try:
+        response = requests.post(DISCORD_WEBHOOK_URL, data=json.dumps(data), headers=headers)
+        print(f"[✅] Test notification sent (status: {response.status_code})")
+    except Exception as e:
+        print(f"[❌] Error sending test notification: {e}")
 
 def check_csfloat():
     try:
+        print("[🔍] Checking CSFloat...")
         res = requests.get(SEARCH_URL)
         res.raise_for_status()
-        listings = res.json()['items']
+        listings = res.json().get("items", [])
+        print(f"[ℹ️] Found {len(listings)} items")
+
         for item in listings:
-            if item['price'] <= PRICE_THRESHOLD and is_clean_knuckles(item['image']):
-                notify_discord(item)
+            if item['price'] <= PRICE_THRESHOLD:
+                print(f"[💰] Under threshold: ${item['price']} – checking image...")
+                if is_clean_knuckles(item['image']):
+                    notify_discord(item)
     except Exception as e:
-        print(f"Error checking CSFloat: {e}")
+        print(f"[❌] Error checking CSFloat: {e}")
 
 if __name__ == "__main__":
     test_notify()
