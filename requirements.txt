@@ -2,3 +2,4 @@ requests
 pillow
 numpy
 beautifulsoup4
+selenium
